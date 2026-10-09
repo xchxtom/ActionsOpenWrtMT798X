@@ -1,4 +1,4 @@
-name: 25.12-clx-s20m-docker
+name: 25.12-clx-s20m-docker-ipk
 
 env:
   DEVICE_NAME: 25.12-clx-s20m

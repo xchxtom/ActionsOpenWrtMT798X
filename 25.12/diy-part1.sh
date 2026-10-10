@@ -19,7 +19,47 @@ git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall-package
 rm -rf feeds/luci/applications/luci-app-passwall
 git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall.git package/custom/passwall
 git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall2.git package/custom/passwall2
+# ===== 自动修补 shadow-tls Makefile（解决 ring/OpenSSL 链接符号缺失问题） =====
+MAKEFILE="package/custom/passwall-packages/shadow-tls/Makefile"
+if [ -f "$MAKEFILE" ]; then
+  echo "Patching $MAKEFILE to add libopenssl dependency and allow cross pkg-config..."
 
+  # 1) 添加 PKG_CONFIG_ALLOW_CROSS:=1（若不存在）
+  if ! grep -q '^PKG_CONFIG_ALLOW_CROSS' "$MAKEFILE"; then
+    sed -i '1i PKG_CONFIG_ALLOW_CROSS:=1' "$MAKEFILE"
+    echo "  - added PKG_CONFIG_ALLOW_CROSS:=1"
+  else
+    echo "  - PKG_CONFIG_ALLOW_CROSS already present"
+  fi
+
+  # 2) 确保 DEPENDS 包含 +libopenssl（若已有 DEPENDS，则追加；否则插入）
+  if grep -q '^DEPENDS:=' "$MAKEFILE"; then
+    if ! grep -q 'libopenssl' "$MAKEFILE"; then
+      # 在已有 DEPENDS 行末尾追加 +libopenssl
+      sed -i '/^DEPENDS:=[[:space:]]*/ s/$/ +libopenssl/' "$MAKEFILE"
+      echo "  - appended +libopenssl to existing DEPENDS"
+    else
+      echo "  - libopenssl already present in DEPENDS"
+    fi
+  else
+    # 如果没有 DEPENDS 行，则在 PKG_CONFIG_ALLOW_CROSS 行后插入 DEPENDS
+    if grep -q '^PKG_CONFIG_ALLOW_CROSS' "$MAKEFILE"; then
+      sed -i '/^PKG_CONFIG_ALLOW_CROSS:=1/a DEPENDS:=+libopenssl' "$MAKEFILE"
+    else
+      sed -i '1a DEPENDS:=+libopenssl' "$MAKEFILE"
+    fi
+    echo "  - inserted DEPENDS:=+libopenssl"
+  fi
+
+  # 3) 额外安全提示：若 Makefile 中有自定义 Build/Compile，可提示设置 PKG_CONFIG_PATH（不强制修改）
+  if grep -q '^define Build/Compile' "$MAKEFILE"; then
+    echo "  - note: Makefile defines custom Build/Compile; if编译仍失败，请在该段前设置 PKG_CONFIG_ALLOW_CROSS=1 和 PKG_CONFIG_PATH 指向 staging_dir"
+  fi
+
+else
+  echo "Note: $MAKEFILE not found — skipped patch. The passwall-packages repo might have a different layout or clone failed."
+fi
+# ===== 补丁结束 =====
 
 # OpenClash update to new version
 rm -rf feeds/luci/applications/luci-app-openclash
